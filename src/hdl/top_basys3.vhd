@@ -143,7 +143,7 @@ begin
     generic map(k_DIV => 25000000)
     port map (
         i_clk => clk,
-        i_reset => btnL or btnU,
+        i_reset => w_clkreset,
         o_clk => w_clk
     );
     
@@ -151,14 +151,14 @@ begin
         generic map(k_DIV => 200000)
         port map (
             i_clk => clk,
-            i_reset => btnL or btnU,
+            i_reset => w_clkreset,
             o_clk => w_clk1
         );
 	
 	elevator_controller_inst : elevator_controller_fsm
        port map (
         i_clk     => w_clk,
-        i_reset   => w_clkreset,
+        i_reset   => w_tdmreset,
         i_stop    => sw(1),
         i_up_down => sw(0),
         o_floor   => w_floor
@@ -175,7 +175,7 @@ begin
                generic map(k_WIDTH  => 4) -- bits in input and output
                 port map ( 
                        i_clk     => w_clk1,
-                       i_reset   => w_tdmreset,
+                       i_reset   => w_clkreset,
                        i_D3     => w_tensplit,
                        i_D2     => w_onesplit,
                        i_D1     => "0000",
