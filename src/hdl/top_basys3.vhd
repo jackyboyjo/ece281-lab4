@@ -93,12 +93,14 @@ architecture top_basys3_arch of top_basys3 is
   
 	-- declare components and signals
     component clock_divider is
-        generic ( constant k_DIV : natural := 25000000    );
+        generic ( constant k_DIV : natural := 4);
         port (     i_clk    : in std_logic;           -- basys3 clk
                 i_reset  : in std_logic;           -- asynchronous
                 o_clk    : out std_logic           -- divided (slow) clock
         );
     end component clock_divider;
+    
+    
     
     component elevator_controller_fsm is
             Port ( i_clk     : in  STD_LOGIC;
@@ -109,18 +111,18 @@ architecture top_basys3_arch of top_basys3 is
                  );
     end component elevator_controller_fsm;
     
---    component TDM4 is
-  --      generic ( constant k_WIDTH : natural  := 4); -- bits in input and output
---        Port ( i_clk        : in  STD_LOGIC;
- --              i_reset        : in  STD_LOGIC; -- asynchronous
- --              i_D3         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
-  --             i_D2         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
-    --           i_D1         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
-      --         i_D0         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
-        --       o_data        : out STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
-          --     o_sel        : out STD_LOGIC_VECTOR (3 downto 0)    -- selected data line (one-cold)
---        );
-  --  end component TDM4;
+    component TDM4 is
+       generic ( constant k_WIDTH : natural  := 4); -- bits in input and output
+        Port ( i_clk        : in  STD_LOGIC;
+               i_reset        : in  STD_LOGIC; -- asynchronous
+               i_D3         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               i_D2         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               i_D1         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               i_D0         : in  STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               o_data        : out STD_LOGIC_VECTOR (k_WIDTH - 1 downto 0);
+               o_sel        : out STD_LOGIC_VECTOR (3 downto 0)    -- selected data line (one-cold)
+        );
+    end component TDM4;
     
     component sevenSegDecoder is
         Port ( i_D : in STD_LOGIC_VECTOR (3 downto 0);
@@ -128,20 +130,35 @@ architecture top_basys3_arch of top_basys3 is
     end component sevenSegDecoder;
     
     signal w_clk: std_logic;
+    signal w_clk1: std_logic;
     signal w_floor: std_logic_vector(3 downto 0);
+    signal w_data: std_logic_vector(3 downto 0);
+    signal w_tensplit: std_logic_vector(3 downto 0);
+    signal w_onesplit: std_logic_vector(3 downto 0);
+    signal w_clkreset: std_logic;
+    signal w_tdmreset: std_logic;
 begin
 	-- PORT MAPS ----------------------------------------
     clk_div_inst: clock_divider
+    generic map(k_DIV => 25000000)
     port map (
         i_clk => clk,
         i_reset => btnL or btnU,
         o_clk => w_clk
     );
+    
+    other_clk_div_inst: clock_divider
+        generic map(k_DIV => 200000)
+        port map (
+            i_clk => clk,
+            i_reset => btnL or btnU,
+            o_clk => w_clk1
+        );
 	
 	elevator_controller_inst : elevator_controller_fsm
        port map (
         i_clk     => w_clk,
-        i_reset   => btnR or btnU,
+        i_reset   => w_clkreset,
         i_stop    => sw(1),
         i_up_down => sw(0),
         o_floor   => w_floor
@@ -149,11 +166,56 @@ begin
      
      sevenSegDecoder_inst: sevenSegDecoder 
         port map (
-        i_D  => w_floor,         --: in STD_LOGIC_VECTOR (3 downto 0),
+        i_D  => w_data,         --: in STD_LOGIC_VECTOR (3 downto 0),
         o_S  => seg         --: out STD_LOGIC_VECTOR (6 downto 0),
         );
+        
+        
+        TDM4_inst: TDM4
+               generic map(k_WIDTH  => 4) -- bits in input and output
+                port map ( 
+                       i_clk     => w_clk1,
+                       i_reset   => w_tdmreset,
+                       i_D3     => w_tensplit,
+                       i_D2     => w_onesplit,
+                       i_D1     => "0000",
+                       i_D0     => "0000",
+                       o_data   => w_data,
+                       o_sel    => an
+                );
 	-- CONCURRENT STATEMENTS ----------------------------
 	
+	w_tensplit <=      "0001" when w_floor = "1010" else
+                       "0001" when w_floor = "1011" else
+                       "0001" when w_floor = "1100" else
+                       "0001" when w_floor = "1101" else
+                       "0001" when w_floor = "1110" else
+                       "0001" when w_floor = "1111" else
+                       "0001" when w_floor = "0000" else
+	                   "0000";
+	
+	
+	w_onesplit <=  "0001" when w_floor = "0001" else
+	               "0010" when w_floor = "0010" else
+	               "0011" when w_floor = "0011" else
+	               "0100" when w_floor = "0100" else
+	               "0101" when w_floor = "0101" else 
+	               "0110" when w_floor = "0110" else
+	               "0111" when w_floor = "0111" else
+	               "1000" when w_floor = "1000" else
+	               
+	               "1001" when w_floor = "1001" else
+	              -- "0000" when w_floor = "1010" else
+	               "0001" when w_floor = "1011" else
+	               "0010" when w_floor = "1100" else
+	               "0011" when w_floor = "1101" else
+	               "0100" when w_floor = "1110" else
+	               "0101" when w_floor = "1111" else
+	               "0110" when w_floor = "0000" else
+	               "0000";
+	
+	w_clkreset <= btnL or btnU;
+    w_tdmreset <= btnR or btnR;
 	-- LED 15 gets the FSM slow clock signal. The rest are grounded.
 	led(15) <= w_clk;
 	led(0) <= '0';
@@ -172,11 +234,8 @@ begin
 	led(13) <= '0';
 	led(14) <= '0';
 	
-	an(0) <= '1';
 	an(1) <= '1';
-	an(2) <= '1';
-	
-	an(3) <= '0';
+	an(0) <= '1';
 
 	-- leave unused switches UNCONNECTED. Ignore any warnings this causes.
 	
